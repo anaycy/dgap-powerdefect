@@ -1,0 +1,24 @@
+# ============================================================
+# DGAP —— 面向电力边缘设备的缺陷感知自适应轻量化检测系统
+# 依赖清单
+# ============================================================
+# 【重要】torch / torchvision 必须是 CUDA 版，不能用 CPU 版！
+# 用 01_创建环境.bat 自动装，或手动执行：
+#   .venv/Scripts/python.exe -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+#
+# torch 装好之后，再装下面这些（不含 torch）：
+#   .venv/Scripts/python.exe -m pip install -r requirements.txt
+# ============================================================
+
+ultralytics>=8.3.0          # YOLOv8 框架（训练/验证/导出）
+torch_pruning>=1.4.0        # 结构化剪枝引擎（DGAP 剪枝用）
+thop                        # 计算 FLOPs / 参数量
+numpy
+pyyaml
+matplotlib
+pandas
+opencv-python               # 图像读取/展示
+onnx                        # ONNX 导出
+onnxruntime                 # ONNX 推理验证（CPU 即可，先跑通）
+tqdm
+py-cpuinfo

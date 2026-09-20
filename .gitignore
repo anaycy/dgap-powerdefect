@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+runs/
+results/*.json
+results/metrics/
+results/sensitivity/
+data/images/
+data/labels/
+*.pt
+*.onnx
+*.engine
+.DS_Store

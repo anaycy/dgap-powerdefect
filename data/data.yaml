@@ -1,0 +1,23 @@
+# ============================================================
+# DGAP 数据集配置 —— data.yaml
+# 说明：
+#   1) path 用【绝对路径】，Windows 反斜杠写成 / 或 \\
+#   2) train/val/test 都是【相对 path 的目录】，指向图片文件夹
+#   3) 图片和标签按 YOLO 目录结构放置（见 data/README.md）
+#   4) names 和 nc 按你实际下载的数据集类别【必须改】！
+# ============================================================
+
+path: E:/大学/111明理杯/dgap-powerdefect/data   # 数据集根目录
+
+train: images/train   # 训练集图片目录（相对 path）
+val: images/val       # 验证集图片目录
+test: images/test     # 测试集图片目录（没有 test 就删掉这一行）
+
+# ------- 类别：按你的数据集修改 -------
+# 示例：3 类（破损绝缘子 / 鸟巢 / 销钉缺失）
+names:
+  0: damaged_insulator   # 破损绝缘子
+  1: bird_nest           # 鸟巢
+  2: missing_pin         # 销钉缺失
+
+nc: 3   # 类别数量，必须和 names 一致

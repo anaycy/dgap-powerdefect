@@ -1,0 +1,31 @@
+# ============================================================
+# DGAP 总配置：自适应剪枝(模块A) + 缺陷区域蒸馏(模块B) + 量化(模块C)
+# ============================================================
+
+# ---------------- 模块A：缺陷感知自适应结构化剪枝 ----------------
+prune:
+  global_ratio: 0.5          # 目标整体剪枝比例（约删掉一半通道，配合细调达到参数量压缩≥60%）
+  mode: defect               # defect = DGAP自适应剪枝 / uniform = 普通全局剪枝(对照)
+  sensitivity_file: results/sensitivity/defect_sensitivity.pkl   # 敏感性分析输出
+  adaptive_beta: 0.6         # 自适应力度(0~1)：越大，缺陷敏感层剪得越少、越“自适应”
+  ratio_min: 0.1             # 每层剪枝比例下限
+  ratio_max: 0.8             # 每层剪枝比例上限
+  fine_tune_epochs: 80       # 剪枝后微调轮数
+
+# ---------------- 模块B：缺陷区域知识蒸馏 ----------------
+distill:
+  enable: true
+  teacher: runs/baseline/yolov8s/weights/best.pt   # 教师模型 = 原始高精度模型
+  lambda_det: 1.0            # 检测损失权重
+  lambda_feat: 5.0           # 特征蒸馏损失权重
+  defect_weight: 5.0         # 缺陷区域相对背景的蒸馏权重（模块B创新点）
+  epochs: 60
+  batch: 16
+  lr: 0.0002
+
+# ---------------- 模块C：混合精度量化 + 导出 ----------------
+quantize:
+  imgsz: 640
+  onnx_fp32: true            # 导出 fp32 ONNX（基线，给报告用）
+  onnx_fp16: true            # 导出 fp16 ONNX（混合/半精度，边缘部署推荐）
+  tensorrt_int8: false       # INT8 需要 TensorRT（Jetson / 带TensorRT的机器），没有先 false
