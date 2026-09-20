@@ -27,6 +27,8 @@ import torch.nn.functional as F
 import yaml
 from tqdm import tqdm
 
+from .utils import torch_device
+
 
 def _load_yaml(path):
     with open(path, encoding="utf-8") as f:
@@ -83,6 +85,7 @@ def defect_region_distill(teacher, student, data_yaml, epochs=60, batch=16,
     from ultralytics.utils import RANK
     from ultralytics.utils.loss import v8DetectionLoss
 
+    device = torch_device(device)
     cfg = _load_yaml(data_yaml)
     root = cfg["path"]
 

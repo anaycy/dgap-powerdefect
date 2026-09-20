@@ -25,6 +25,8 @@ import torch.nn as nn
 import yaml
 from tqdm import tqdm
 
+from .utils import torch_device
+
 
 def _load_yaml(path):
     with open(path, encoding="utf-8") as f:
@@ -46,7 +48,7 @@ class DefectSensitivity:
 
     def __init__(self, model, device="cuda"):
         self.model = model              # ultralytics DetectionModel（即 YOLO('x.pt').model）
-        self.device = device
+        self.device = torch_device(device)
         self.hooks = []
         self.activations = {}           # name -> list[Tensor]
 
@@ -107,6 +109,7 @@ class DefectSensitivity:
 def compute_sensitivity(model, data_yaml, device="cuda", imgsz=640,
                         num_images=32, out_path="results/sensitivity/defect_sensitivity.pkl"):
     """遍历 num_images 张验证图，汇总每层每通道缺陷敏感度并保存 pkl。"""
+    device = torch_device(device)
     cfg = _load_yaml(data_yaml)
     root = cfg["path"]
     val_img_dir = os.path.join(root, cfg["val"])

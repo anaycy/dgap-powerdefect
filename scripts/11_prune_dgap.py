@@ -19,7 +19,11 @@
 import argparse
 import os
 import pickle
+import sys
 import torch
+
+# 让 scripts/ 下的脚本能 import 到项目根的 dgap 包
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ultralytics import YOLO
 
@@ -64,7 +68,7 @@ def main():
     if args.fine_tune:
         pm = YOLO(out)
         pm.train(data=args.data, epochs=args.epochs, imgsz=640, device=args.device,
-                 project="runs/finetune", name=f"{tag}_r{args.ratio}", exist_ok=True)
+                 save_dir=f"runs/finetune/{tag}_r{args.ratio}", exist_ok=True)
         print(f"\n微调完成 -> runs/finetune/{tag}_r{args.ratio}/weights/best.pt")
     print("下一步：scripts/02_metrics.py 计算剪枝后指标（记得 --method 区分方法名）")
 

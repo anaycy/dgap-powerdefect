@@ -12,6 +12,10 @@
 """
 import argparse
 import os
+import sys
+
+# 让 scripts/ 下的脚本能 import 到项目根的 dgap 包
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
 from ultralytics import YOLO

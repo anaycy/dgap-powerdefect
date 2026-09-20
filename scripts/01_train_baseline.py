@@ -35,8 +35,7 @@ def main():
         batch=args.batch,
         imgsz=args.imgsz,
         device=args.device,
-        project="runs/baseline",
-        name=args.model,
+        save_dir=f"runs/baseline/{args.model}",   # ultralytics 8.4 用 save_dir 指定输出目录
         exist_ok=True,
         patience=30,        # 30 轮 mAP 不涨就早停
         save=True,

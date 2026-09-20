@@ -18,6 +18,17 @@ import torch
 from ultralytics import YOLO
 
 
+def _torch_device(d):
+    """ultralytics 风格设备 '0'/'cpu' -> torch 风格 'cuda:0'/'cpu'。"""
+    if not torch.cuda.is_available():
+        return "cpu"
+    d = str(d)
+    if d == "cpu":
+        return "cpu"
+    d = d.split(",")[0].strip()          # 多卡时只取第一块
+    return f"cuda:{d}" if d.isdigit() else d
+
+
 def benchmark_fps(model, device, imgsz, warmup=20, iters=100):
     """纯网络推理 FPS（fp16, batch=1），论文常用口径。"""
     model.model.to(device).half().eval()
@@ -45,17 +56,17 @@ def main():
     p.add_argument("--no-append", action="store_true", help="只算不写入汇总表")
     args = p.parse_args()
 
-    device = args.device if torch.cuda.is_available() else "cpu"
+    device = _torch_device(args.device)
     model = YOLO(args.weights)
 
     # ---- 1) Params ----
     n_param = sum(p.numel() for p in model.model.parameters())
-    n_train = sum(p.numel() for p in model.model.parameters() if p.requires_grad)
 
-    # ---- 2) FLOPs（thop，统一口径，跨模型可比）----
+    # ---- 2) FLOPs（thop 返回 MACs，乘 2 才是 FLOPs）----
     from thop import profile
     dummy = torch.zeros(1, 3, args.imgsz, args.imgsz).to(device)
-    flops, _ = profile(model.model.to(device).eval(), inputs=(dummy,), verbose=False)
+    macs, _ = profile(model.model.to(device).eval(), inputs=(dummy,), verbose=False)
+    flops = macs * 2
 
     # ---- 3) mAP ----
     # split 不存在时 ultralytics 会回退到 val；这里手动兜底
@@ -78,7 +89,6 @@ def main():
     out = {
         "method": method,
         "params_M": round(n_param / 1e6, 2),
-        "trainable_params_M": round(n_train / 1e6, 2),
         "flops_G": round(flops / 1e9, 2),
         "map50": round(map50, 4),
         "map50_95": round(map50_95, 4),

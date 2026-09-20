@@ -8,6 +8,11 @@
     results/sensitivity/defect_sensitivity.pkl 生成，并打印“缺陷最敏感的 5 个层”。
 """
 import argparse
+import os
+import sys
+
+# 让 scripts/ 下的脚本能 import 到项目根的 dgap 包
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ultralytics import YOLO
 

@@ -8,6 +8,11 @@
     runs/export/ 下出现 *.onnx（fp32 + fp16），打印大小和 CPU 推理 FPS。
 """
 import argparse
+import os
+import sys
+
+# 让 scripts/ 下的脚本能 import 到项目根的 dgap 包
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dgap.quantize import export_onnx, export_tensorrt_int8
 
