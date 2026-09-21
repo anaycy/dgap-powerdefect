@@ -12,10 +12,15 @@
 import argparse
 import json
 import os
+import sys
 import time
 
 import torch
 from ultralytics import YOLO
+
+# 让本脚本能 import 项目根 dgap 包（含 C2f_v2，剪枝后 checkpoint 需它才能被反序列化）
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import dgap.c2f_v2  # noqa: F401,E402  注册 C2f_v2
 
 
 def _torch_device(d):

@@ -9,6 +9,7 @@ DGAP —— Defect-Guided Adaptive Pruning
   distill.py      缺陷区域知识蒸馏（模块B）
   quantize.py     混合精度量化 + ONNX/TensorRT 导出（模块C）
 """
+from . import c2f_v2  # noqa: F401  注册 C2f_v2，保证剪枝后 checkpoint 可被反序列化
 from .sensitivity import DefectSensitivity, compute_sensitivity
 from .pruner import prune_uniform, prune_dgap
 from .quantize import export_onnx

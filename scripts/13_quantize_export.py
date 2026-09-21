@@ -15,6 +15,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dgap.quantize import export_onnx, export_tensorrt_int8
+import dgap.c2f_v2  # noqa: F401  注册 C2f_v2，供重载剪枝后的 checkpoint
 
 
 def main():

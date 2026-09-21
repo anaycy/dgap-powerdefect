@@ -34,12 +34,16 @@ def _load_yaml(path):
 
 
 def _xywh2xyxy(boxes):
-    """(N,4) 归一化 cx,cy,w,h -> x1,y1,x2,y2"""
+    """(N,4) 归一化 cx,cy,w,h -> x1,y1,x2,y2
+
+    YOLO 标签顺序是 (cls, cx, cy, w, h)，即 b[:,0]=cx, b[:,1]=cy,
+    b[:,2]=w, b[:,3]=h。左上/右下角必须用 w/h 换算，不能用 cx/cy。
+    """
     b = np.array(boxes, dtype=np.float32).reshape(-1, 4)
-    x1 = b[:, 0] - b[:, 1] / 2
-    y1 = b[:, 2] - b[:, 3] / 2
-    x2 = b[:, 0] + b[:, 1] / 2
-    y2 = b[:, 2] + b[:, 3] / 2
+    x1 = b[:, 0] - b[:, 2] / 2   # cx - w/2
+    y1 = b[:, 1] - b[:, 3] / 2   # cy - h/2
+    x2 = b[:, 0] + b[:, 2] / 2   # cx + w/2
+    y2 = b[:, 1] + b[:, 3] / 2   # cy + h/2
     return np.stack([x1, y1, x2, y2], axis=1)
 
 
@@ -109,6 +113,12 @@ class DefectSensitivity:
 def compute_sensitivity(model, data_yaml, device="cuda", imgsz=640,
                         num_images=32, out_path="results/sensitivity/defect_sensitivity.pkl"):
     """遍历 num_images 张验证图，汇总每层每通道缺陷敏感度并保存 pkl。"""
+    # 与剪枝阶段保持一致：先把 C2f 重参数化为 C2f_v2，保证敏感度字典的层名
+    # （model.2.cv0.conv / model.2.cv1.conv ...）与后续 prune_dgap 拿到的模型一致。
+    from .c2f_v2 import replace_c2f_with_c2f_v2
+
+    replace_c2f_with_c2f_v2(model)
+
     device = torch_device(device)
     cfg = _load_yaml(data_yaml)
     root = cfg["path"]
@@ -134,7 +144,8 @@ def compute_sensitivity(model, data_yaml, device="cuda", imgsz=640,
         if img is None:
             continue
         img = cv2.resize(img, (imgsz, imgsz))
-        x = torch.from_numpy(img[:, :, ::-1].transpose(2, 0, 1)).float() / 255.0  # BGR->RGB, CHW
+        # BGR->RGB, HWC->CHW；[::-1] 会产生负 stride 视图，torch.from_numpy 不支持，需转连续
+        x = torch.from_numpy(np.ascontiguousarray(img[:, :, ::-1].transpose(2, 0, 1))).float() / 255.0
 
         boxes = []
         if os.path.exists(lbl_path):
