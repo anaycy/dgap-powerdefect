@@ -11,20 +11,22 @@
 
 ```
 dgap-powerdefect/
-├── README.md                  ← 本文件（完整手把手教程）
+├── README.md                  ← 本文件（项目总览 + 快速开始）
 ├── 01_创建环境.bat            ← 一键装环境
-├── 02_下载数据集.md           ← 数据集来源 + 整理方法
 ├── requirements.txt
 ├── configs/dgap.yaml          ← 剪枝/蒸馏/量化总配置
 ├── data/
-│   ├── data.yaml              ← 数据集配置（改类别）
-│   └── images/ labels/        ← 数据放这里（自己整理）
+│   ├── data.yaml              ← 数据集配置（nc=2，两类）
+│   ├── README.md              ← data 目录说明
+│   └── images/ labels/        ← 数据（gitignore，不入库，组员按 docs 自行获取）
 ├── dgap/                      ← 核心算法包
 │   ├── sensitivity.py         ← 缺陷感知敏感性分析（模块A创新点）
 │   ├── pruner.py              ← 自适应结构化剪枝（模块A）
+│   ├── c2f_v2.py              ← C2f 重参数化（torch_pruning 兼容，见 docs/修复记录.md）
 │   ├── distill.py             ← 缺陷区域知识蒸馏（模块B）
-│   └── quantize.py            ← 量化 + ONNX/TensorRT 导出（模块C）
-├── scripts/                   ← 每一步的运行脚本
+│   ├── quantize.py            ← 量化 + ONNX/TensorRT 导出（模块C）
+│   └── utils.py
+├── scripts/                   ← 运行脚本
 │   ├── 00_check_env.py        ← 环境自检
 │   ├── 01_train_baseline.py   ← Baseline 训练
 │   ├── 02_metrics.py          ← 算 Params/FLOPs/mAP/FPS
@@ -32,9 +34,16 @@ dgap-powerdefect/
 │   ├── 10_sensitivity.py      ← 敏感性分析
 │   ├── 11_prune_dgap.py       ← 剪枝（普通 vs DGAP）
 │   ├── 12_distill.py          ← 蒸馏
-│   └── 13_quantize_export.py  ← 量化导出
-├── runs/                      ← 训练/剪枝/微调/导出产物（自动生成）
-└── results/                   ← 指标 json + 实验表（自动生成）
+│   ├── 13_quantize_export.py  ← 量化导出
+│   └── 20~24_*.py             ← 数据：划分/增强/VOC转换/CPLID转换/销钉合并
+├── docs/                      ← 项目文档
+│   ├── 进度记录.md            ← 进度（下次从这里继续）
+│   ├── 修复记录.md            ← 代码缺陷与修复清单
+│   ├── 问题和要求.md          ← 申报书要求 + 创新点
+│   └── 数据采集方案.md        ← 数据集来源与整理
+├── raw_datasets/              ← 原始下载数据（gitignore，仅本地凭证）
+├── runs/ results/             ← 训练/结果产物（自动生成，gitignore）
+└── yolov8s.pt                 ← 预训练权重（gitignore，ultralytics 自动下载）
 ```
 
 **总路线**（对照申报书 B3 表）：
@@ -76,14 +85,19 @@ python -m venv .venv
 
 ## 2. 阶段二：准备数据集
 
-见 **`02_下载数据集.md`**。整理好后目录长这样：
+数据集已整理好：**3095 张，2 类**（破损绝缘子 + 销钉缺失），已按 7:2:1 划分
+（train 2166 / val 619 / test 310）。目录长这样：
 
 ```
 data/images/train/*.jpg   data/labels/train/*.txt
 data/images/val/*.jpg     data/labels/val/*.txt
+data/images/test/*.jpg    data/labels/test/*.txt
 ```
 
-改好 `data/data.yaml` 里的 `names` 和 `nc`。
+`data/data.yaml` 已配好（`nc: 2`，`names: [broken_insulator, missing_pin]`）。
+
+> 数据集本身不入 Git（`data/images/`、`data/labels/` 在 `.gitignore` 里）。
+> 组员如何获取/重建数据、来源与整理方法，见 **`docs/数据采集方案.md`**。
 
 ---
 
@@ -190,8 +204,9 @@ data/images/val/*.jpg     data/labels/val/*.txt
 剪枝后再各跑一次 `02_metrics.py`（method 名分别写 `"普通剪枝"`、`"DGAP自适应剪枝"`），
 再跑 `03_make_table.py`，表格就出现三行了。
 
-> **阶段六 / 七 / 八的代码是完整写好的，但属于“阶段2”，第一次跑可能会遇到
-> torch_pruning / ultralytics 版本的细微 API 差异。报错了把完整报错贴给我，我们一起修。**
+> 阶段六/七/八的代码已全部调通（含 torch_pruning 与 ultralytics 8.4 的 C2f 兼容问题、
+> 剪枝后微调的模型注入等，详见 **`docs/修复记录.md`**）。首次完整跑一般能直接运行，
+> 若报错把完整报错贴出来一起修。
 
 ---
 
@@ -240,7 +255,7 @@ DGAP 自适应 + 缺陷蒸馏把 mAP 下降压到 0.41（≤3%），同时参数
 ## 10. 附：申报书 B3 表填写要点
 
 - **组别**：信息技术；**学科领域**：计算机。
-- **作品设计目的/思路/创新点/技术指标**：直接抄 `要求.txt` 的三个创新点 + 关键技术指标。
+- **作品设计目的/思路/创新点/技术指标**：直接抄 `docs/问题和要求.md` 的三个创新点 + 关键技术指标。
 - **作品可展示形式**：勾选 □实物、产品 □现场演示 □图片 □录像（软件系统 + 树莓派/Jetson 终端）。
 - **作品所处阶段**：○实验室阶段。
 - **科学性先进性**：和现有“统一剪枝”对比，说明你的“缺陷感知自适应”的实质性进步，附参考文献。

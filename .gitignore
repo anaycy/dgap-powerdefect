@@ -1,13 +1,21 @@
+# ===== Python =====
 .venv/
 __pycache__/
 *.pyc
-runs/
-results/*.json
-results/metrics/
-results/sensitivity/
+
+# ===== 大数据集（组员按 docs/数据采集方案.md 自行获取）=====
 data/images/
 data/labels/
+raw_datasets/
+
+# ===== 训练/实验结果（可复现，不入库）=====
+runs/
+results/
+
+# ===== 模型权重（预训练权重 ultralytics 会自动下载）=====
 *.pt
 *.onnx
 *.engine
+
+# ===== 系统文件 =====
 .DS_Store

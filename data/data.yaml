@@ -1,16 +1,26 @@
 # ============================================================
 # DGAP 数据集配置 —— data.yaml
-# 数据集：iraset（破损玻璃绝缘子检测，1 类，Roboflow 导出）
-#   训练 909 张 / 验证 101 张
+# 当前：破损玻璃绝缘子（1 类）。扩充为多类后，改 names/nc 即可。
+#
+# 目录结构（图片与标签分开放，同名对应）：
+#   data/images/{train,val,test}  +  data/labels/{train,val,test}
+#   7:2:1 划分由 scripts/20_split_dataset.py 生成。
+#
+# 类别规划（见 docs/数据采集方案.md）：
+#   0: broken_insulator  破损绝缘子（已有 iraset 909 张）
+#   1: missing_pin       销钉缺失（小缺陷，公开数据集补充）
+#   ...可再加 污闪/正常绝缘子 等
 # ============================================================
 
 path: E:/大学/111明理杯/dgap-powerdefect/data   # 数据集根目录（绝对路径）
 
 train: images/train   # 训练图片目录（相对 path）
 val: images/val       # 验证图片目录
+test: images/test     # 测试图片目录（20_split_dataset.py 会生成）
 
-# 类别：只有 1 类（破损玻璃绝缘子）
+# 类别（缺陷检测，2 类）
 names:
-  0: broken_insulator
+  0: broken_insulator   # 破损绝缘子（iraset + CPLID defect）
+  1: missing_pin        # 销钉缺失（SADL-YOLOv11 Pin 数据集）
 
-nc: 1   # 类别数量
+nc: 2   # 类别数量（改 names 时同步改这里）

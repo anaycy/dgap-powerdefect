@@ -27,7 +27,7 @@ class_id  x_center  y_center  width  height
 
 ## 你只需要做三步
 
-1. 下载数据集（见 `02_下载数据集.md`）。
+1. 下载数据集（见 `docs/数据采集方案.md`）。
 2. 把图片塞进 `images/train|val|test`，把同名的 `.txt` 标签塞进 `labels/train|val|test`。
 3. 改 `data.yaml` 里的 `names` 和 `nc`，让它们和数据集的实际类别一致。
 
