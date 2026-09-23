@@ -17,6 +17,7 @@ sensitivity.py —— 缺陷感知通道敏感性分析（模块A 的核心创�
 """
 import os
 import pickle
+import random
 
 import cv2
 import numpy as np
@@ -31,20 +32,6 @@ from .utils import torch_device
 def _load_yaml(path):
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
-
-
-def _xywh2xyxy(boxes):
-    """(N,4) 归一化 cx,cy,w,h -> x1,y1,x2,y2
-
-    YOLO 标签顺序是 (cls, cx, cy, w, h)，即 b[:,0]=cx, b[:,1]=cy,
-    b[:,2]=w, b[:,3]=h。左上/右下角必须用 w/h 换算，不能用 cx/cy。
-    """
-    b = np.array(boxes, dtype=np.float32).reshape(-1, 4)
-    x1 = b[:, 0] - b[:, 2] / 2   # cx - w/2
-    y1 = b[:, 1] - b[:, 3] / 2   # cy - h/2
-    x2 = b[:, 0] + b[:, 2] / 2   # cx + w/2
-    y2 = b[:, 1] + b[:, 3] / 2   # cy + h/2
-    return np.stack([x1, y1, x2, y2], axis=1)
 
 
 class DefectSensitivity:
@@ -127,8 +114,11 @@ def compute_sensitivity(model, data_yaml, device="cuda", imgsz=640,
     split_name = os.path.basename(os.path.normpath(cfg["val"]))
     val_lbl_dir = os.path.join(root, "labels", split_name)
 
-    imgs = sorted(os.listdir(val_img_dir))
-    imgs = [i for i in imgs if i.lower().endswith((".jpg", ".jpeg", ".png", ".bmp"))][:num_images]
+    imgs = [i for i in os.listdir(val_img_dir)
+            if i.lower().endswith((".jpg", ".jpeg", ".png", ".bmp"))]
+    if len(imgs) > num_images:
+        random.seed(42)  # 固定 seed，保证可复现；随机采样覆盖所有来源/类别
+        imgs = random.sample(imgs, num_images)
     if not imgs:
         raise FileNotFoundError(f"在 {val_img_dir} 没找到图片，先整理数据集（见 data/README.md）")
 
@@ -143,17 +133,32 @@ def compute_sensitivity(model, data_yaml, device="cuda", imgsz=640,
         img = cv2.imread(img_path)
         if img is None:
             continue
-        img = cv2.resize(img, (imgsz, imgsz))
+        # letterbox：保长宽比 + 灰边填充，与训练/推理一致（不能 cv2.resize 直接拉伸）
+        orig_h, orig_w = img.shape[:2]
+        scale = min(imgsz / orig_w, imgsz / orig_h)
+        new_w, new_h = int(round(orig_w * scale)), int(round(orig_h * scale))
+        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        canvas = np.full((imgsz, imgsz, 3), 114, dtype=np.uint8)
+        dw, dh = (imgsz - new_w) // 2, (imgsz - new_h) // 2
+        canvas[dh:dh + new_h, dw:dw + new_w] = resized
         # BGR->RGB, HWC->CHW；[::-1] 会产生负 stride 视图，torch.from_numpy 不支持，需转连续
-        x = torch.from_numpy(np.ascontiguousarray(img[:, :, ::-1].transpose(2, 0, 1))).float() / 255.0
+        x = torch.from_numpy(np.ascontiguousarray(canvas[:, :, ::-1].transpose(2, 0, 1))).float() / 255.0
 
-        boxes = []
+        boxes_xyxy = []
         if os.path.exists(lbl_path):
             for line in open(lbl_path, encoding="utf-8"):
                 p = line.strip().split()
                 if len(p) >= 5:
-                    boxes.append([float(p[1]), float(p[2]), float(p[3]), float(p[4])])
-        boxes_xyxy = _xywh2xyxy(boxes) if boxes else np.zeros((0, 4), dtype=np.float32)
+                    cx, cy, w, h = float(p[1]), float(p[2]), float(p[3]), float(p[4])
+                    # 原图归一化 cxcywh -> letterbox 后的归一化 xyxy（同步 offset + 缩放）
+                    cx2 = (cx * new_w + dw) / imgsz
+                    cy2 = (cy * new_h + dh) / imgsz
+                    w2 = w * new_w / imgsz
+                    h2 = h * new_h / imgsz
+                    boxes_xyxy.append([cx2 - w2 / 2, cy2 - h2 / 2,
+                                       cx2 + w2 / 2, cy2 + h2 / 2])
+        boxes_xyxy = (np.array(boxes_xyxy, dtype=np.float32).reshape(-1, 4)
+                      if boxes_xyxy else np.zeros((0, 4), dtype=np.float32))
 
         layer_score = ds._forward_image(x, boxes_xyxy)
         for name, s in layer_score.items():

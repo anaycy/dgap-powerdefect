@@ -90,14 +90,32 @@ def prune_dgap(model, sensitivity, global_ratio=0.5, beta=0.6,
     # 模块对象 -> 名字 的反查表（torch_pruning 的 group 只给 module）
     name_of = {m: n for n, m in model.named_modules()}
 
-    # 1) 层级自适应比例：ratio_i = clamp(global * (1 + beta*(1 - importance_i)))
-    #    importance_i = 该层各通道缺陷敏感度的均值（0~1，越大越要保留）
-    ratio_dict = {}
+    # 1) 层级自适应比例：某层缺陷敏感度越高，剪枝比例越小。
+    #    以全体卷积层的平均敏感度 imp_mean 为中性点：高于均值的敏感层少剪
+    #    （比例 < global_ratio），低于均值的冗余层多剪（比例 > global_ratio），
+    #    保证整体压缩率仍围绕 global_ratio，同时让"敏感层低剪枝"名副其实。
+    name_imp = {}
+    matched = 0
     for name, m in model.named_modules():
         if isinstance(m, nn.Conv2d):
             s = sensitivity.get(name)
-            imp = float(np.clip(s.mean(), 0.0, 1.0)) if s is not None else 0.5
-            r = global_ratio * (1.0 + beta * (1.0 - imp))
+            if s is not None:
+                name_imp[name] = float(np.clip(s.mean(), 0.0, 1.0))
+                matched += 1
+            else:
+                name_imp[name] = 0.5
+    imp_mean = float(np.mean(list(name_imp.values()))) if name_imp else 0.5
+    print(f"[DGAP] 敏感性匹配 {matched}/{len(name_imp)} 个卷积层"
+          f"（未匹配的按 0.5 处理），平均敏感度 {imp_mean:.3f}")
+    if matched == 0:
+        print("[DGAP] 警告：没有任何层匹配到敏感性分析结果，DGAP 将退化为普通剪枝！"
+              "请先跑 scripts/10_sensitivity.py，并确认层名一致。")
+
+    ratio_dict = {}
+    for name, m in model.named_modules():
+        if isinstance(m, nn.Conv2d):
+            imp = name_imp[name]
+            r = global_ratio * (1.0 + beta * (imp_mean - imp))
             ratio_dict[m] = max(ratio_min, min(ratio_max, r))
 
     # 2) 通道级缺陷感知重要性：敏感度越高越保留
