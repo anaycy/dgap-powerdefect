@@ -1,261 +1,175 @@
-# DGAP —— 面向电力边缘设备的缺陷感知自适应轻量化检测系统
+# 软硬结合·边端自治·闭环诊断的电力缺陷边缘智能系统
 
 > 挑战杯 / 明理杯 · 科技发明制作 B 类 · 信息技术（计算机）
 >
-> 一句话：把 YOLO 目标检测模型针对**电力缺陷**做**自适应剪枝 + 缺陷区域蒸馏 + 混合精度量化**，
-> 在 mAP 几乎不掉的前提下，参数量压缩 ≥60%、推理提速 ≥2.2 倍，并导出 ONNX 部署到边缘设备。
+> 一句话：软硬结合，把电力缺陷检测模型轻量化后下沉到边缘设备，
+> 并形成「采集 → 检测 → 分级 → 预警 → 工单」的闭环诊断，而非单个检测器。
 
 ---
 
-## 0. 项目目录结构
+## 0. 项目定位（对标全国铜奖「云协智端」）
+
+获奖项目「云协智端」的骨架是「硬件板卡 + 网关 → 边缘算力 → 平台」三层。
+本项目复刻并扩展这一骨架，每一层都有独立的技术内容：
+
+| 层 | 云协智端 | 本项目 | 状态 |
+|---|---|---|---|
+| 硬件层 | 智能采集板卡 + 泛兼容网关 | 自研多源采集板卡 + 树莓派边缘网关 | 软件实做 / 硬件设计见成员2指南 |
+| 边缘算力层 | 算力下沉 + 嵌入型检测 | 缺陷感知自适应轻量化（剪枝/蒸馏/量化） | 已有 |
+| 平台/应用层 | 行业 AI 模型 + 监测平台 | 闭环诊断终端 + 一键部署平台 | 本项目实做 |
+| 跨模态层 | — | 无配对可见光 + 红外决策级融合 | 本项目实做 |
+
+---
+
+## 1. 要解决的四个痛点（对应四个创新点）
+
+1. **边缘算力受限**：高精度检测模型在树莓派等低算力设备上跑不动。
+2. **通用压缩"一刀切"**：全局统一剪枝/量化对小目标缺陷（销钉缺失、绝缘子破损）"一视同仁"，压缩后精度暴跌。
+3. **跨模态数据缺失**：可见光 + 红外融合需要同一场景的配对图，但配对数据集不存在（纯红外数据集多、配对图没有）。
+4. **缺闭环**：现有方案多是"检测器"，检测完就结束，缺"检测 → 诊断 → 决策 → 执行"。
+
+---
+
+## 2. 创新点
+
+1. **缺陷感知自适应轻量化**：分层特征贡献度评估 + 混合粒度剪枝量化联合优化 + 缺陷区域知识蒸馏，保护小目标缺陷通道。
+2. **闭环诊断引擎**：检测结果 → 分级（紧急/严重/一般/注意）→ 定位（杆塔号/线路/图内位置）→ 预警 → 工单。
+3. **无配对跨模态决策级融合**：可见光与红外各自检测、决策级合并，不依赖不存在的配对数据，互补漏检。
+4. **软硬结合**：自研多源采集板卡（可见光/红外测温/温湿度/振动）+ 树莓派边缘网关，边端自治。
+5. **可视化一键部署平台**：训练 → 压缩 → 导出 → 评估，网页点按钮走完。
+
+---
+
+## 3. 技术路线
+
+```
+电力缺陷数据集 → 高精度模型(教师) → 缺陷感知剪枝 → 缺陷区域蒸馏 → 混合精度量化
+   → ONNX 导出 → 边缘网关(采集 + 检测 + 诊断) → 告警 / 工单
+```
+
+---
+
+## 4. 关键指标（实测为准，见 `results/实验对比表.md`）
+
+- 参数量压缩 ≥60%、推理提速 ≥2.2 倍、mAP@0.5 下降 ≤3%；
+- 边缘端到端时延 / 整机功耗（成员2 在树莓派上实测）。
+
+---
+
+## 5. 目录结构
 
 ```
 dgap-powerdefect/
-├── README.md                  ← 本文件（项目总览 + 快速开始）
-├── 01_创建环境.bat            ← 一键装环境
-├── requirements.txt
-├── configs/dgap.yaml          ← 剪枝/蒸馏/量化总配置
+├── README.md                     ← 本文件（项目门面）
+├── requirements.txt              ← 依赖（含可选的 gradio/mqtt/serial）
+├── configs/dgap.yaml             ← 剪枝/蒸馏/量化总配置
 ├── data/
-│   ├── data.yaml              ← 数据集配置（nc=2，两类）
-│   ├── README.md              ← data 目录说明
-│   └── images/ labels/        ← 数据（gitignore，不入库，组员按 docs 自行获取）
-├── dgap/                      ← 核心算法包
-│   ├── sensitivity.py         ← 缺陷感知敏感性分析（模块A创新点）
-│   ├── pruner.py              ← 自适应结构化剪枝（模块A）
-│   ├── c2f_v2.py              ← C2f 重参数化（torch_pruning 兼容，见 docs/修复记录.md）
-│   ├── distill.py             ← 缺陷区域知识蒸馏（模块B）
-│   ├── quantize.py            ← 量化 + ONNX/TensorRT 导出（模块C）
+│   ├── data.yaml                 ← 数据集配置（nc=2，两类）
+│   └── images/ labels/           ← 数据（gitignore，按 docs/数据采集方案.md 获取）
+├── dgap/                         ← 核心算法包
+│   ├── sensitivity.py            ← 缺陷感知敏感性分析（创新点1）
+│   ├── pruner.py                 ← 自适应结构化剪枝（创新点1）
+│   ├── c2f_v2.py                 ← C2f 重参数化（torch_pruning 兼容）
+│   ├── distill.py                ← 缺陷区域知识蒸馏（创新点1）
+│   ├── quantize.py               ← 量化 + ONNX/TensorRT 导出（创新点1）
+│   ├── diagnosis.py              ← 闭环诊断引擎（创新点2，纯逻辑）
+│   ├── fusion.py                 ← 跨模态决策级融合（创新点3，纯逻辑）
 │   └── utils.py
-├── scripts/                   ← 运行脚本
-│   ├── 00_check_env.py        ← 环境自检
-│   ├── 01_train_baseline.py   ← Baseline 训练
-│   ├── 02_metrics.py          ← 算 Params/FLOPs/mAP/FPS
-│   ├── 03_make_table.py       ← 生成实验对比表
-│   ├── 10_sensitivity.py      ← 敏感性分析
-│   ├── 11_prune_dgap.py       ← 剪枝（普通 vs DGAP）
-│   ├── 12_distill.py          ← 蒸馏
-│   ├── 13_quantize_export.py  ← 量化导出
-│   └── 20~24_*.py             ← 数据：划分/增强/VOC转换/CPLID转换/销钉合并
-├── docs/                      ← 项目文档
-│   ├── 进度记录.md            ← 进度（下次从这里继续）
-│   ├── 修复记录.md            ← 代码缺陷与修复清单
-│   ├── 问题和要求.md          ← 申报书要求 + 创新点
-│   └── 数据采集方案.md        ← 数据集来源与整理
-├── raw_datasets/              ← 原始下载数据（gitignore，仅本地凭证）
-├── runs/ results/             ← 训练/结果产物（自动生成，gitignore）
-└── yolov8s.pt                 ← 预训练权重（gitignore，ultralytics 自动下载）
-```
-
-**总路线**（对照申报书 B3 表）：
-
-```
-电力缺陷数据集 → 原始高精度模型 → 缺陷敏感性分析 → 自适应剪枝
-→ 缺陷区域蒸馏 → 混合精度量化 → ONNX/TensorRT → 边缘部署
+├── scripts/                      ← 运行脚本
+│   ├── 00_check_env.py           ← 环境自检
+│   ├── 01_train_baseline.py      ← Baseline 训练
+│   ├── 02_metrics.py             ← 算 Params/FLOPs/mAP/FPS
+│   ├── 03_make_table.py          ← 生成实验对比表
+│   ├── 10_sensitivity.py         ← 敏感性分析
+│   ├── 11_prune_dgap.py          ← 剪枝（普通 vs DGAP）
+│   ├── 12_distill.py             ← 蒸馏
+│   ├── 13_quantize_export.py     ← 量化导出
+│   ├── 20~24_*.py                ← 数据：划分/增强/转换
+│   ├── 30_demo_ui.py             ← 闭环诊断演示界面（创新点2）
+│   ├── 40_platform.py            ← 一键部署平台（创新点5）
+│   ├── 41_gateway.py             ← 边缘网关（创新点4）
+│   └── 42_board_simulator.py     ← 采集板卡模拟器（创新点4）
+├── tests/                        ← 单元测试（diagnosis / fusion）
+├── docs/                         ← 项目文档
+│   ├── 分工与计划.md             ← 三人分工 + 时间线
+│   ├── 成员2行动指南.md          ← 硬件 + 采集板卡 + 部署
+│   ├── 成员3行动指南.md          ← 界面 + 申报书 + PPT
+│   ├── 演示界面与申报书模板.md   ← 申报书 B3/C/D 表模板
+│   ├── 数据采集方案.md           ← 数据集来源与整理
+│   └── ...
+├── raw_datasets/                 ← 原始下载数据（gitignore）
+├── runs/ results/                ← 训练/结果产物（自动生成，gitignore）
+└── yolov8s.pt                    ← 预训练权重（gitignore）
 ```
 
 ---
 
-## 1. 阶段一：装环境
+## 6. 快速开始
 
-**目标**：在 `.venv` 里装好 CUDA 版 PyTorch + ultralytics。
-
-双击运行 `01_创建环境.bat`（或命令行执行）：
+### 6.1 装环境
 
 ```bash
 cd /e/大学/111明理杯/dgap-powerdefect
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
 .venv/Scripts/python.exe -m pip install -r requirements.txt
-```
-
-**成功标志**（自检）：
-
-```bash
+# 自检
 .venv/Scripts/python.exe scripts/00_check_env.py
-# 最后一行必须出现：  ===== 环境检查全部通过 =====
-# 且能看到：  [OK] CUDA 可用，GPU = NVIDIA GeForce RTX 4060 ...
 ```
 
-**报错排查**：
-- `CUDA 不可用` → 你装的是 CPU 版 torch，删掉 `.venv` 重跑上面的 `--index-url` 那行。
-- `torch_pruning 未安装` → `pip install torch_pruning`。
-- `ModuleNotFoundError: cv2` → `pip install opencv-python`。
+### 6.2 备数据 + 训 baseline
 
----
-
-## 2. 阶段二：准备数据集
-
-数据集已整理好：**3095 张，2 类**（破损绝缘子 + 销钉缺失），已按 7:2:1 划分
-（train 2166 / val 619 / test 310）。目录长这样：
-
-```
-data/images/train/*.jpg   data/labels/train/*.txt
-data/images/val/*.jpg     data/labels/val/*.txt
-data/images/test/*.jpg    data/labels/test/*.txt
-```
-
-`data/data.yaml` 已配好（`nc: 2`，`names: [broken_insulator, missing_pin]`）。
-
-> 数据集本身不入 Git（`data/images/`、`data/labels/` 在 `.gitignore` 里）。
-> 组员如何获取/重建数据、来源与整理方法，见 **`docs/数据采集方案.md`**。
-
----
-
-## 3. 阶段三：训练 Baseline（原始高精度模型）
+数据集：3095 张、2 类（破损绝缘子 + 销钉缺失），来源见 `docs/数据采集方案.md`。
 
 ```bash
-.venv/Scripts/python.exe scripts/01_train_baseline.py --model yolov8s --epochs 100 --batch 16
+.venv/Scripts/python.exe scripts/01_train_baseline.py --epochs 100
+.venv/Scripts/python.exe scripts/02_metrics.py --weights runs/baseline/yolov8s/weights/best.pt --data data/data.yaml --method "Baseline(YOLOv8s)"
 ```
 
-- 首次会自动下载 `yolov8s.pt`（约 22MB）。
-- **成功标志**：`runs/baseline/yolov8s/weights/best.pt` 和 `last.pt` 出现；
-  同时 `runs/baseline/yolov8s/` 里有 `results.png`（loss/mAP 曲线）、`confusion_matrix.png`。
-- **报错排查**：
-  - `CUDA out of memory` → 把 `--batch` 从 16 降到 8 或 4。
-  - `Dataset not found` / `images/train 空` → data.yaml 的 path 写错或图片没放对，见 `data/README.md`。
-  - 类别数报错 `nc mismatch` → data.yaml 的 nc 和实际标签的最大 class_id 不符。
-
----
-
-## 4. 阶段四：算指标（Params / FLOPs / mAP / FPS）
+### 6.3 跑闭环诊断 demo（无需训练完也能看效果）
 
 ```bash
-.venv/Scripts/python.exe scripts/02_metrics.py \
-  --weights runs/baseline/yolov8s/weights/best.pt \
-  --data data/data.yaml --method "Baseline(YOLOv8s)"
+.venv/Scripts/pip.exe install gradio
+.venv/Scripts/python.exe scripts/30_demo_ui.py   # 浏览器打开 http://127.0.0.1:7860
 ```
 
-**成功标志**：终端打印类似
+上传巡检图 → 选模型 → 检出缺陷 + 分级 + 定位 + 运维建议工单。
 
-```json
-{
-  "method": "Baseline(YOLOv8s)",
-  "params_M": 11.13,
-  "flops_G": 28.5,
-  "map50": 0.8734,
-  "map50_95": 0.6122,
-  "fps": 156.4,
-  "size_MB": 22.5
-}
-```
-
-- Params（M）：参数量，百万为单位。
-- FLOPs（G）：算力消耗，十亿次浮点运算。
-- mAP@50：IoU=0.5 的平均精度（缺陷检测常用指标）。
-- mAP@50-95：更严格的平均精度。
-- FPS：GPU 上 fp16 单张推理帧率。
-
----
-
-## 5. 阶段五：生成第一张实验表
+### 6.4 一键部署平台
 
 ```bash
-.venv/Scripts/python.exe scripts/03_make_table.py
+.venv/Scripts/python.exe scripts/40_platform.py  # 网页点按钮：训练→压缩→导出→报告
 ```
-
-**成功标志**：生成 `results/实验对比表.md` 和 `results/实验对比表.csv`，内容像这样：
-
-| 方法 | Params(M)↓ | FLOPs(G)↓ | mAP@50↑ | mAP@50-95↑ | FPS↑ | 大小(MB)↓ | 参数量压缩% | mAP@50下降% |
-|---|---|---|---|---|---|---|---|---|
-| Baseline(YOLOv8s) | 11.13 | 28.50 | 0.8734 | 0.6122 | 156.4 | 22.50 | — | — |
-
-> 这就是你要的**第一张实验结果表**。之后每做一个方法，跑一次 `02_metrics.py`
-> （带不同的 `--method` 名），再跑 `03_make_table.py`，表格就会自动多一行，
-> 并自动算出「参数量压缩%」「mAP下降%」。
-
-**到这里，Baseline 阶段全部完成。** 下面进入 DGAP 三个模块。
 
 ---
 
-## 6. 阶段六：DGAP 自适应剪枝
+## 7. 硬件清单
 
-### 6.1 缺陷敏感性分析（模块A 的创新点）
+| 状态 | 硬件 | 用途 |
+|---|---|---|
+| 已购 | 树莓派 5（8GB） | 边缘网关（本地推理 + 闭环诊断） |
+| 已购 | 普通 USB 摄像头 | 可见光采集 |
+| 待购 | MLX90640 红外测温模块 | 采集板卡热成像 |
+| 待购 | DHT22 温湿度传感器 | 环境监测 |
+| 待购 | SW-420 振动传感器 | 杆塔振动监测 |
+| 待购 | ESP32-DevKitC | 采集板卡 MCU |
 
-```bash
-.venv/Scripts/python.exe scripts/10_sensitivity.py \
-  --weights runs/baseline/yolov8s/weights/best.pt --data data/data.yaml
-```
-
-**成功标志**：生成 `results/sensitivity/defect_sensitivity.pkl`，并打印：
-```
-缺陷最敏感的 5 个层（剪枝时重点保留）：
-  model.2.cv1.conv: 平均敏感度 0.873
-  ...
-```
-
-### 6.2 自适应剪枝（含微调）
-
-```bash
-# DGAP 自适应剪枝
-.venv/Scripts/python.exe scripts/11_prune_dgap.py \
-  --weights runs/baseline/yolov8s/weights/best.pt --data data/data.yaml \
-  --mode defect --ratio 0.5 --fine-tune
-
-# 普通剪枝（对照实验）
-.venv/Scripts/python.exe scripts/11_prune_dgap.py \
-  --weights runs/baseline/yolov8s/weights/best.pt --data data/data.yaml \
-  --mode uniform --ratio 0.5 --fine-tune
-```
-
-**成功标志**：
-- `runs/pruned/dgap_r0.5.pt`（剪枝后的裸模型）
-- `runs/finetune/dgap_r0.5/weights/best.pt`（微调后的最终模型）
-
-剪枝后再各跑一次 `02_metrics.py`（method 名分别写 `"普通剪枝"`、`"DGAP自适应剪枝"`），
-再跑 `03_make_table.py`，表格就出现三行了。
-
-> 阶段六/七/八的代码已全部调通（含 torch_pruning 与 ultralytics 8.4 的 C2f 兼容问题、
-> 剪枝后微调的模型注入等，详见 **`docs/修复记录.md`**）。首次完整跑一般能直接运行，
-> 若报错把完整报错贴出来一起修。
+> 待购硬件的接口、接线、固件与打样流程见 `docs/成员2行动指南.md`。
 
 ---
 
-## 7. 阶段七：缺陷区域知识蒸馏（模块B）
+## 8. 团队分工
 
-```bash
-.venv/Scripts/python.exe scripts/12_distill.py \
-  --student runs/finetune/dgap_r0.5/weights/best.pt \
-  --teacher runs/baseline/yolov8s/weights/best.pt \
-  --data data/data.yaml --epochs 60
-```
+| 成员 | 角色 | 核心产出 |
+|---|---|---|
+| 成员1 | 算法 | 剪枝/蒸馏/量化 + 消融实验对比表 |
+| 成员2 | 部署 + 硬件 | 采集板卡 + 树莓派网关 + 性能测试 |
+| 成员3 | 界面 + 材料 | 演示界面 + 申报书/研究报告/PPT |
 
-**成功标志**：生成 `runs/distilled/student_distilled.pt`，随后照旧跑 `02_metrics.py`
-（method 名 `"自适应剪枝+缺陷蒸馏"`）。
+详见 `docs/分工与计划.md`。
 
 ---
 
-## 8. 阶段八：混合精度量化 + 导出（模块C）
+## 9. 软件著作权 / 知识产权
 
-```bash
-.venv/Scripts/python.exe scripts/13_quantize_export.py \
-  --weights runs/finetune/dgap_r0.5/weights/best.pt --data data/data.yaml
-```
-
-**成功标志**：`runs/export/` 下出现 `.onnx`（fp32 和 fp16），打印各自大小和 CPU 推理 FPS。
-有 Jetson / 装了 TensorRT 的机器，加 `--int8` 再导一个 INT8 引擎。
-
----
-
-## 9. 完整实验对比表（最终目标）
-
-跑完所有方法后，`results/实验对比表.md` 长这样（示例，数字会因数据集不同而变化）：
-
-| 方法 | Params(M)↓ | FLOPs(G)↓ | mAP@50↑ | mAP@50-95↑ | FPS↑ | 大小(MB)↓ | 参数量压缩% | mAP@50下降% |
-|---|---|---|---|---|---|---|---|---|
-| Baseline(YOLOv8s) | 11.13 | 28.50 | 0.8734 | 0.6122 | 156.4 | 22.50 | — | — |
-| 普通剪枝 | 4.02 | 9.80 | 0.8411 | 0.5703 | 265.9 | 9.10 | 63.9% | 3.23 |
-| DGAP自适应剪枝 | 4.15 | 10.05 | 0.8620 | 0.5940 | 258.1 | 9.40 | 62.7% | 1.14 |
-| 自适应剪枝+缺陷蒸馏 | 4.15 | 10.05 | 0.8693 | 0.6033 | 258.1 | 9.40 | 62.7% | 0.41 |
-
-**这一张表就是申报书 B3 表的核心证据**：普通剪枝 mAP 掉 3.23（超标），
-DGAP 自适应 + 缺陷蒸馏把 mAP 下降压到 0.41（≤3%），同时参数量压缩 ≥60%。
-
----
-
-## 10. 附：申报书 B3 表填写要点
-
-- **组别**：信息技术；**学科领域**：计算机。
-- **作品设计目的/思路/创新点/技术指标**：直接抄 `docs/问题和要求.md` 的三个创新点 + 关键技术指标。
-- **作品可展示形式**：勾选 □实物、产品 □现场演示 □图片 □录像（软件系统 + 树莓派/Jetson 终端）。
-- **作品所处阶段**：○实验室阶段。
-- **科学性先进性**：和现有“统一剪枝”对比，说明你的“缺陷感知自适应”的实质性进步，附参考文献。
+一键部署工具链与闭环诊断引擎为自主开发，可申请软件著作权（受理通知书可作为成果支撑）。

@@ -22,3 +22,8 @@ onnx                        # ONNX 导出
 onnxruntime                 # ONNX 推理验证（CPU 即可，先跑通）
 tqdm
 py-cpuinfo
+
+# ---- 以下为 DGAP 软硬结合/平台/网关的可选依赖，按需装 ----
+gradio                      # 演示界面 + 部署平台（30_demo_ui / 40_platform）
+paho-mqtt                   # 网关/板卡模拟器 MQTT 上报
+pyserial                    # 板卡 UART 串口通信
