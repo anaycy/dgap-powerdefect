@@ -72,6 +72,7 @@ def main():
     p.add_argument("--mode", default="defect", choices=["uniform", "defect"])
     p.add_argument("--ratio", type=float, default=0.5, help="整体剪枝比例 0~1")
     p.add_argument("--sensitivity", default="results/sensitivity/defect_sensitivity.pkl")
+    p.add_argument("--name", default="", help="输出名后缀，避免覆盖已有结果（如 --name ir）")
     p.add_argument("--fine-tune", action="store_true", help="剪枝后立即微调（推荐）")
     p.add_argument("--epochs", type=int, default=80, help="微调轮数")
     p.add_argument("--batch", type=int, default=16, help="微调 batch size")
@@ -93,6 +94,9 @@ def main():
     else:
         prune_uniform(m, ratio=args.ratio, ignored_layers=ignored)
         tag = "uniform"
+
+    if args.name:
+        tag = f"{tag}_{args.name}"
 
     n1 = _count_params(m)
     print(f"\n剪枝完成：参数量 {n0/1e6:.2f}M -> {n1/1e6:.2f}M（压缩 {(1-n1/n0)*100:.1f}%）")

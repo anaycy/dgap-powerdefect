@@ -24,12 +24,14 @@ def main():
     p.add_argument("--weights", required=True, help="原始高精度模型 best.pt")
     p.add_argument("--data", default="data/data.yaml")
     p.add_argument("--num-images", type=int, default=32, help="分析用图片数，越多越准")
+    p.add_argument("--out", default="results/sensitivity/defect_sensitivity.pkl",
+                   help="敏感性结果输出 pkl（换模型时用不同名避免覆盖）")
     p.add_argument("--device", default="0")
     args = p.parse_args()
 
     model = YOLO(args.weights)
     compute_sensitivity(model.model, args.data, device=args.device,
-                        num_images=args.num_images)
+                        num_images=args.num_images, out_path=args.out)
     print("\n完成。下一步：scripts/11_prune_dgap.py 做自适应剪枝")
 
 

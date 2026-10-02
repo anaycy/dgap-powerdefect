@@ -11,6 +11,7 @@ DEFAULT_CLASSES = ["broken_insulator", "missing_pin"]
 BASE_RISK = {
     "missing_pin": 4,       # 销钉缺失 = 直接危及运行
     "broken_insulator": 3,  # 绝缘子破损 = 按面积分级
+    "hot": 4,               # 发热（红外热缺陷） = 直接危及运行
 }
 
 SUGGESTIONS = {

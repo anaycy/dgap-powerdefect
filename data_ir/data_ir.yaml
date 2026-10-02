@@ -1,0 +1,7 @@
+# 红外数据集（OverheatDL 转换，仅热缺陷）
+path: E:\大学\111明理杯\dgap-powerdefect\data_ir
+train: images/train
+val: images/val   # 用 test.json 当验证集
+names:
+  0: hot
+nc: 1

@@ -34,7 +34,7 @@
 
 1. **缺陷感知自适应轻量化**：分层特征贡献度评估 + 混合粒度剪枝量化联合优化 + 缺陷区域知识蒸馏，保护小目标缺陷通道。
 2. **闭环诊断引擎**：检测结果 → 分级（紧急/严重/一般/注意）→ 定位（杆塔号/线路/图内位置）→ 预警 → 工单。
-3. **无配对跨模态决策级融合**：可见光与红外各自检测、决策级合并，不依赖不存在的配对数据，互补漏检。
+3. **无配对结构-热互补融合**：可见光检结构缺陷（破损绝缘子/销钉缺失）、红外检热缺陷（发热），决策级互补——结构破损与局部发热共现时自动升级严重度，并由采集板卡传感器（光照/时间）驱动模态可信度自适应加权，全程无需配对数据。
 4. **软硬结合**：自研多源采集板卡（可见光/红外测温/温湿度/振动）+ 树莓派边缘网关，边端自治。
 5. **可视化一键部署平台**：训练 → 压缩 → 导出 → 评估，网页点按钮走完。
 
@@ -43,8 +43,9 @@
 ## 3. 技术路线
 
 ```
-电力缺陷数据集 → 高精度模型(教师) → 缺陷感知剪枝 → 缺陷区域蒸馏 → 混合精度量化
-   → ONNX 导出 → 边缘网关(采集 + 检测 + 诊断) → 告警 / 工单
+可见光: 结构缺陷数据集 → 高精度模型 → 缺陷感知剪枝 → 缺陷蒸馏 → 混合精度量化
+红外:   热缺陷数据集(OverheatDL) → 高精度模型 → 缺陷感知剪枝 → 混合精度量化
+   → 双模态 ONNX → 边缘网关(采集 + 检测 + 诊断) → 无配对结构-热互补融合 → 告警 / 工单
 ```
 
 ---
@@ -52,6 +53,7 @@
 ## 4. 关键指标（实测为准，见 `results/实验对比表.md`）
 
 - 参数量压缩率整体围绕 ≥50%、推理提速 ≥2.2 倍、mAP@0.5 下降 ≤3%；
+- 可见光模型 mAP@50=0.778（压缩 69.3%），红外模型 mAP@50=0.500（压缩 70.4%）；
 - 边缘端到端时延 / 整机功耗（成员2 在树莓派上实测）。
 
 ---
@@ -66,6 +68,7 @@ dgap-powerdefect/
 ├── data/
 │   ├── data.yaml                 ← 数据集配置（nc=2，两类）
 │   └── images/ labels/           ← 数据（gitignore，按 docs/数据采集方案.md 获取）
+├── data_ir/                      ← 红外数据集（OverheatDL，nc=1 发热，gitignore）
 ├── dgap/                         ← 核心算法包
 │   ├── sensitivity.py            ← 缺陷感知敏感性分析（创新点1）
 │   ├── pruner.py                 ← 自适应结构化剪枝（创新点1）
@@ -73,7 +76,8 @@ dgap-powerdefect/
 │   ├── distill.py                ← 缺陷区域知识蒸馏（创新点1）
 │   ├── quantize.py               ← 量化 + ONNX/TensorRT 导出（创新点1）
 │   ├── diagnosis.py              ← 闭环诊断引擎（创新点2，纯逻辑）
-│   ├── fusion.py                 ← 跨模态决策级融合（创新点3，纯逻辑）
+│   ├── fusion.py                 ← IoU 合并（基础）
+│   ├── crossmodal.py             ← 无配对结构-热互补融合（创新点3，纯逻辑）
 │   └── utils.py
 ├── scripts/                      ← 运行脚本
 │   ├── 00_check_env.py           ← 环境自检
@@ -85,6 +89,9 @@ dgap-powerdefect/
 │   ├── 12_distill.py             ← 蒸馏
 │   ├── 13_quantize_export.py     ← 量化导出
 │   ├── 20~24_*.py                ← 数据：划分/增强/转换
+│   ├── 25_train_ir.py            ← 红外热缺陷模型训练
+│   ├── 26_convert_ir.py          ← OverheatDL COCO→YOLO 转换
+│   ├── 27_fusion_demo.py         ← 跨模态融合演示（创新点3）
 │   ├── 30_demo_ui.py             ← 闭环诊断演示界面（创新点2）
 │   ├── 40_platform.py            ← 一键部署平台（创新点5）
 │   ├── 41_gateway.py             ← 边缘网关（创新点4）
@@ -139,6 +146,18 @@ python -m venv .venv
 
 ```bash
 .venv/Scripts/python.exe scripts/40_platform.py  # 网页点按钮：训练→压缩→导出→报告
+```
+
+### 6.5 红外模型 + 跨模态融合（创新点3）
+
+```bash
+# 红外数据已转好（data_ir/，单类 hot）；如需重转：
+.venv/Scripts/python.exe scripts/26_convert_ir.py
+# 训练红外热缺陷模型
+.venv/Scripts/python.exe scripts/25_train_ir.py --model yolov8s --epochs 100
+# 跨模态融合演示（可见光图 + 红外图 + 场景条件）
+.venv/Scripts/python.exe scripts/27_fusion_demo.py \
+    --vis data/images/test/cplid_013.jpg --ir data_ir/images/val/0213.jpg --illumination 0.3
 ```
 
 ---
